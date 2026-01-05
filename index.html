@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Zen Market Watch - 台股</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --border-color: #222222;
+            --text-primary: #e0e0e0;
+            --text-secondary: #888888;
+            --text-muted: #555555;
+            --accent-blue: #2962ff;
+            --color-up: #26a69a;
+            --color-down: #ef5350;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+            color: var(--text-primary);
+        }
+
+        .app-container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Chart Area */
+        .chart-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            background: var(--bg-primary);
+        }
+
+        .chart-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            flex-wrap: wrap;
+        }
+
+        .current-stock-label {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            min-width: 140px;
+        }
+
+        .interval-buttons {
+            display: flex;
+            gap: 4px;
+        }
+
+        .interval-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 6px 12px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .interval-btn:hover {
+            background: var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .interval-btn.active {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: white;
+        }
+
+        /* Notes Section */
+        .notes-section {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+        }
+
+        .notes-label {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .notes-input {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 6px 12px;
+            color: var(--text-primary);
+            font-size: 13px;
+            width: 320px;
+        }
+
+        .notes-input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .notes-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .save-notes-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 6px 12px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+
+        .save-notes-btn:hover {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: white;
+        }
+
+        .chart-container {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+        }
+
+        #chart {
+            width: 100%;
+            height: 100%;
+        }
+
+        .chart-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        /* Watchlist Panel */
+        .watchlist-section {
+            width: 340px;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-color);
+        }
+
+        .watchlist-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .watchlist-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .watchlist-title img {
+            width: 18px;
+            height: 18px;
+        }
+
+        .refresh-status {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Search Box */
+        .search-box {
+            padding: 10px 14px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .search-input-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .search-input {
+            flex: 1;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: var(--text-primary);
+            font-size: 13px;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .add-btn {
+            background: var(--accent-blue);
+            border: none;
+            border-radius: 6px;
+            padding: 8px 14px;
+            color: white;
+            font-size: 13px;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+
+        .add-btn:hover {
+            opacity: 0.85;
+        }
+
+        .watchlist-content {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        /* Draggable Stock Item */
+        .stock-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background 0.15s;
+            position: relative;
+            user-select: none;
+        }
+
+        .stock-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .stock-item.active {
+            background: rgba(41, 98, 255, 0.12);
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .stock-item.dragging {
+            opacity: 0.5;
+            background: var(--bg-tertiary);
+        }
+
+        .stock-item.drag-over {
+            border-top: 2px solid var(--accent-blue);
+        }
+
+        .drag-handle {
+            cursor: grab;
+            color: var(--text-muted);
+            padding: 4px 8px 4px 0;
+            font-size: 14px;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
+        .stock-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .stock-code {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .stock-name {
+            font-size: 11px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stock-price-data {
+            text-align: right;
+            margin-right: 8px;
+        }
+
+        .price-main {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .price-change {
+            font-size: 11px;
+            margin-top: 1px;
+        }
+
+        .delete-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 12px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.15s;
+        }
+
+        .delete-btn:hover {
+            background: var(--color-down);
+            border-color: var(--color-down);
+            color: white;
+        }
+
+        .up {
+            color: var(--color-up);
+        }
+
+        .down {
+            color: var(--color-down);
+        }
+
+        .flat {
+            color: var(--text-muted);
+        }
+
+        /* Storage Info */
+        .storage-info {
+            padding: 8px 14px;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border-color);
+            font-size: 11px;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .reset-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 4px 10px;
+            color: var(--text-muted);
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .reset-btn:hover {
+            border-color: var(--color-down);
+            color: var(--color-down);
+        }
+
+        /* Scrollbar */
+        .watchlist-content::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .watchlist-content::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        .watchlist-content::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 2px;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .notes-section {
+                display: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .app-container {
+                flex-direction: column;
+            }
+
+            .chart-section {
+                height: 50%;
+            }
+
+            .watchlist-section {
+                width: 100%;
+                height: 50%;
+                border-left: none;
+                border-top: 1px solid var(--border-color);
+            }
+
+            .chart-toolbar {
+                padding: 8px 12px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .interval-buttons {
+                display: none;
+            }
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 20px;
+            color: var(--text-primary);
+            font-size: 13px;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Chart Section -->
+        <div class="chart-section">
+            <div class="chart-toolbar">
+                <span id="currentStockLabel" class="current-stock-label">0050 元大台灣50</span>
+                <div class="interval-buttons">
+                    <button class="interval-btn active" data-interval="D" onclick="changeInterval('D')">日K</button>
+                    <button class="interval-btn" data-interval="W" onclick="changeInterval('W')">週K</button>
+                    <button class="interval-btn" data-interval="M" onclick="changeInterval('M')">月K</button>
+                </div>
+                <div class="notes-section">
+                    <span class="notes-label">📝</span>
+                    <input type="text" id="notesInput" class="notes-input" placeholder="輸入此股票的備註..." maxlength="50"
+                        oninput="autoSaveNotes()">
+                    <button class="save-notes-btn" onclick="saveNotes()">💾 儲存</button>
+                </div>
+            </div>
+            <div class="chart-container">
+                <div id="chart"></div>
+                <div id="chartLoading" class="chart-loading">載入中...</div>
+            </div>
+        </div>
+
+        <!-- Watchlist Section -->
+        <div class="watchlist-section">
+            <div class="watchlist-header">
+                <span class="watchlist-title">
+                    <img src="favicon.ico" alt="icon">
+                    即時報價
+                </span>
+                <span id="refreshStatus" class="refresh-status">載入中...</span>
+            </div>
+
+            <!-- Search Box -->
+            <div class="search-box">
+                <div class="search-input-group">
+                    <input type="text" id="searchInput" class="search-input" placeholder="輸入股票代碼 (如: 2317)"
+                        onkeypress="handleSearchKeypress(event)">
+                    <button class="add-btn" onclick="addStock()">＋ 新增</button>
+                </div>
+            </div>
+
+            <div id="watchlist" class="watchlist-content"></div>
+
+            <div class="storage-info">
+                <span>💾 拖曳排序 · 備註獨立儲存</span>
+                <button class="reset-btn" onclick="resetToDefault()">重設預設</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // ===== Default Stocks =====
+        const DEFAULT_STOCKS = [
+            { code: '0050', name: '元大台灣50' },
+            { code: '0056', name: '元大高股息' },
+            { code: '00878', name: '國泰永續高股息' },
+            { code: '00918', name: '大華優利高填息30' },
+            { code: '00919', name: '群益台灣精選高息' },
+            { code: '00929', name: '復華台灣科技優息' },
+            { code: '1514', name: '亞力' },
+            { code: '2330', name: '台積電' },
+            { code: '2884', name: '玉山金' },
+            { code: '2885', name: '元大金' }
+        ];
+
+        const STORAGE_KEY = 'zen_watchlist';
+        const NOTES_PREFIX = 'zen_note_';
+
+        const CORS_PROXIES = [
+            'https://corsproxy.io/?',
+            'https://api.allorigins.win/raw?url='
+        ];
+
+        // ===== State =====
+        let stocks = [];
+        let currentStock = '';
+        let currentInterval = 'D';
+        let chart = null;
+        let candlestickSeries = null;
+        let volumeSeries = null;
+        let priceData = {};
+        let proxyIndex = 0;
+        let draggedItem = null;
+        let notesAutoSaveTimer = null;
+
+        // ===== localStorage Functions =====
+        function loadStocks() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    stocks = JSON.parse(saved);
+                    if (stocks.length === 0) {
+                        stocks = [...DEFAULT_STOCKS];
+                    }
+                } else {
+                    stocks = [...DEFAULT_STOCKS];
+                }
+            } catch (e) {
+                stocks = [...DEFAULT_STOCKS];
+            }
+            currentStock = stocks[0]?.code || '0050';
+        }
+
+        function saveStocks() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(stocks));
+            } catch (e) {
+                console.error('Failed to save stocks');
+            }
+        }
+
+        // Per-stock notes
+        function loadNotes(stockCode) {
+            try {
+                const notes = localStorage.getItem(NOTES_PREFIX + stockCode) || '';
+                document.getElementById('notesInput').value = notes;
+            } catch (e) {
+                document.getElementById('notesInput').value = '';
+            }
+        }
+
+        function saveNotes() {
+            try {
+                const notes = document.getElementById('notesInput').value;
+                localStorage.setItem(NOTES_PREFIX + currentStock, notes);
+                showToast(`${currentStock} 備註已儲存`);
+            } catch (e) {
+                showToast('儲存失敗');
+            }
+        }
+
+        function autoSaveNotes() {
+            // Debounce auto-save
+            if (notesAutoSaveTimer) {
+                clearTimeout(notesAutoSaveTimer);
+            }
+            notesAutoSaveTimer = setTimeout(() => {
+                try {
+                    const notes = document.getElementById('notesInput').value;
+                    localStorage.setItem(NOTES_PREFIX + currentStock, notes);
+                } catch (e) {
+                    // Silent fail
+                }
+            }, 1000);
+        }
+
+        function resetToDefault() {
+            if (confirm('確定要重設為預設清單嗎？（備註不會被刪除）')) {
+                stocks = [...DEFAULT_STOCKS];
+                saveStocks();
+                currentStock = stocks[0].code;
+                updateCurrentStockLabel();
+                loadNotes(currentStock);
+                renderWatchlist();
+                fetchHistoricalData(currentStock, currentInterval);
+                fetchQuotes();
+                showToast('已重設為預設清單');
+            }
+        }
+
+        // ===== Update Current Stock Label =====
+        function updateCurrentStockLabel() {
+            const stock = stocks.find(s => s.code === currentStock);
+            const label = stock ? `${stock.code} ${stock.name}` : currentStock;
+            document.getElementById('currentStockLabel').textContent = label;
+        }
+
+        // ===== Add/Remove Stocks =====
+        function addStock() {
+            const input = document.getElementById('searchInput');
+            const code = input.value.trim().toUpperCase();
+
+            if (!code) {
+                showToast('請輸入股票代碼');
+                return;
+            }
+
+            if (stocks.find(s => s.code === code)) {
+                showToast('此股票已在清單中');
+                return;
+            }
+
+            const newStock = { code, name: `股票 ${code}` };
+            stocks.push(newStock);
+            saveStocks();
+
+            input.value = '';
+            renderWatchlist();
+            fetchQuotes();
+            showToast(`已新增 ${code}`);
+        }
+
+        function removeStock(code, event) {
+            event.stopPropagation();
+
+            if (stocks.length <= 1) {
+                showToast('至少需要保留一支股票');
+                return;
+            }
+
+            if (!confirm(`確定要移除 ${code} 嗎？`)) {
+                return;
+            }
+
+            stocks = stocks.filter(s => s.code !== code);
+            saveStocks();
+
+            if (currentStock === code) {
+                currentStock = stocks[0].code;
+                updateCurrentStockLabel();
+                loadNotes(currentStock);
+                fetchHistoricalData(currentStock, currentInterval);
+            }
+
+            renderWatchlist();
+            showToast(`已移除 ${code}`);
+        }
+
+        function handleSearchKeypress(event) {
+            if (event.key === 'Enter') {
+                addStock();
+            }
+        }
+
+        // ===== Drag and Drop =====
+        function handleDragStart(e, index) {
+            draggedItem = index;
+            e.target.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', index);
+        }
+
+        function handleDragEnd(e) {
+            e.target.classList.remove('dragging');
+            document.querySelectorAll('.stock-item').forEach(item => {
+                item.classList.remove('drag-over');
+            });
+            draggedItem = null;
+        }
+
+        function handleDragOver(e, index) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+
+            const items = document.querySelectorAll('.stock-item');
+            items.forEach((item, i) => {
+                item.classList.toggle('drag-over', i === index && i !== draggedItem);
+            });
+        }
+
+        function handleDrop(e, targetIndex) {
+            e.preventDefault();
+
+            if (draggedItem === null || draggedItem === targetIndex) return;
+
+            const [removed] = stocks.splice(draggedItem, 1);
+            stocks.splice(targetIndex, 0, removed);
+
+            saveStocks();
+            renderWatchlist();
+            showToast('順序已更新');
+        }
+
+        // ===== Toast =====
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        // ===== Chart Setup =====
+        function initChart() {
+            const container = document.getElementById('chart');
+
+            chart = LightweightCharts.createChart(container, {
+                layout: {
+                    background: { type: 'solid', color: '#0a0a0a' },
+                    textColor: '#888888',
+                },
+                grid: {
+                    vertLines: { color: '#1a1a1a' },
+                    horzLines: { color: '#1a1a1a' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+                rightPriceScale: {
+                    borderColor: '#222222',
+                },
+                timeScale: {
+                    borderColor: '#222222',
+                    timeVisible: true,
+                },
+                handleScroll: true,
+                handleScale: true,
+            });
+
+            candlestickSeries = chart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderDownColor: '#ef5350',
+                borderUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+                wickUpColor: '#26a69a',
+            });
+
+            volumeSeries = chart.addHistogramSeries({
+                color: '#26a69a',
+                priceFormat: { type: 'volume' },
+                priceScaleId: '',
+                scaleMargins: { top: 0.8, bottom: 0 },
+            });
+
+            const resizeObserver = new ResizeObserver(entries => {
+                if (entries.length === 0 || entries[0].target !== container) return;
+                const { width, height } = entries[0].contentRect;
+                chart.applyOptions({ width, height });
+            });
+            resizeObserver.observe(container);
+        }
+
+        // ===== Generate Demo Data =====
+        function generateDemoData(stockCode) {
+            const data = [];
+            const basePrice = getBasePrice(stockCode);
+
+            let price = basePrice * 0.92;
+            const now = new Date();
+
+            for (let i = 180; i >= 0; i--) {
+                const date = new Date(now);
+                date.setDate(date.getDate() - i);
+
+                if (date.getDay() === 0 || date.getDay() === 6) continue;
+
+                const change = (Math.random() - 0.47) * basePrice * 0.025;
+                const open = price;
+                price = Math.max(basePrice * 0.75, Math.min(basePrice * 1.15, price + change));
+                const close = price;
+                const high = Math.max(open, close) * (1 + Math.random() * 0.012);
+                const low = Math.min(open, close) * (1 - Math.random() * 0.012);
+                const volume = Math.floor(Math.random() * 30000 + 5000) * 1000;
+
+                data.push({
+                    time: date.toISOString().split('T')[0],
+                    open: parseFloat(open.toFixed(2)),
+                    high: parseFloat(high.toFixed(2)),
+                    low: parseFloat(low.toFixed(2)),
+                    close: parseFloat(close.toFixed(2)),
+                    volume
+                });
+            }
+
+            return data;
+        }
+
+        function getBasePrice(code) {
+            const known = {
+                '0050': 152, '0056': 36, '00878': 22, '00918': 21,
+                '00919': 25, '00929': 22, '1514': 185, '2330': 1025,
+                '2884': 29, '2885': 26, '2317': 165, '2454': 1150,
+                '3008': 95, '2412': 125
+            };
+            return known[code] || 100;
+        }
+
+        // ===== Generate Demo Quotes =====
+        function generateDemoQuotes() {
+            stocks.forEach(stock => {
+                const basePrice = getBasePrice(stock.code);
+                const changePercent = (Math.random() - 0.5) * 3;
+                const price = basePrice * (1 + changePercent / 100);
+                const change = price - basePrice;
+
+                priceData[stock.code] = {
+                    price: parseFloat(price.toFixed(2)),
+                    change: parseFloat(change.toFixed(2)),
+                    changePercent: parseFloat(changePercent.toFixed(2))
+                };
+            });
+        }
+
+        // ===== Fetch with Proxy =====
+        async function fetchWithProxy(url) {
+            for (let i = 0; i < CORS_PROXIES.length; i++) {
+                const idx = (proxyIndex + i) % CORS_PROXIES.length;
+                const proxyUrl = CORS_PROXIES[idx] + encodeURIComponent(url);
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+                    const response = await fetch(proxyUrl, {
+                        signal: controller.signal,
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    clearTimeout(timeoutId);
+
+                    if (response.ok) {
+                        proxyIndex = idx;
+                        return await response.json();
+                    }
+                } catch (e) {
+                    console.warn(`Proxy ${idx} failed`);
+                }
+            }
+            throw new Error('All proxies failed');
+        }
+
+        // ===== Fetch Historical Data =====
+        async function fetchHistoricalData(stockCode, interval = 'D') {
+            showLoading(true);
+
+            let allData = [];
+
+            try {
+                const dates = getDateRange(3);
+
+                for (const date of dates) {
+                    const url = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${date}&stockNo=${stockCode}`;
+
+                    try {
+                        const json = await fetchWithProxy(url);
+                        if (json.data && json.data.length > 0) {
+                            const parsed = parseStockDayData(json.data);
+                            allData = allData.concat(parsed);
+                        }
+                    } catch (e) {
+                        // Continue
+                    }
+                }
+            } catch (error) {
+                console.error('Fetch failed');
+            }
+
+            if (allData.length === 0) {
+                allData = generateDemoData(stockCode);
+            }
+
+            allData.sort((a, b) => a.time.localeCompare(b.time));
+
+            if (interval === 'W') {
+                allData = aggregateToWeekly(allData);
+            } else if (interval === 'M') {
+                allData = aggregateToMonthly(allData);
+            }
+
+            if (allData.length > 0) {
+                candlestickSeries.setData(allData);
+
+                const volumeData = allData.map(d => ({
+                    time: d.time,
+                    value: d.volume || 0,
+                    color: d.close >= d.open ? '#26a69a80' : '#ef535080'
+                }));
+                volumeSeries.setData(volumeData);
+
+                chart.timeScale().fitContent();
+            }
+
+            showLoading(false);
+        }
+
+        function parseStockDayData(data) {
+            return data.map(row => {
+                const dateStr = row[0];
+                const [year, month, day] = dateStr.split('/');
+                const fullYear = parseInt(year) + 1911;
+
+                const open = parseFloat(row[3].replace(/,/g, '')) || 0;
+                const high = parseFloat(row[4].replace(/,/g, '')) || 0;
+                const low = parseFloat(row[5].replace(/,/g, '')) || 0;
+                const close = parseFloat(row[6].replace(/,/g, '')) || 0;
+                const volume = parseInt(row[1].replace(/,/g, '')) || 0;
+
+                if (open === 0 || close === 0) return null;
+
+                return {
+                    time: `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
+                    open, high, low, close, volume
+                };
+            }).filter(d => d !== null);
+        }
+
+        function getDateRange(months) {
+            const dates = [];
+            const now = new Date();
+
+            for (let i = 0; i < months; i++) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                const year = d.getFullYear() - 1911;
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                dates.push(`${year}${month}01`);
+            }
+
+            return dates.reverse();
+        }
+
+        function aggregateToWeekly(data) {
+            const weeks = {};
+            data.forEach(d => {
+                const date = new Date(d.time);
+                const weekStart = new Date(date);
+                weekStart.setDate(date.getDate() - date.getDay());
+                const key = weekStart.toISOString().split('T')[0];
+
+                if (!weeks[key]) {
+                    weeks[key] = { time: key, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume };
+                } else {
+                    weeks[key].high = Math.max(weeks[key].high, d.high);
+                    weeks[key].low = Math.min(weeks[key].low, d.low);
+                    weeks[key].close = d.close;
+                    weeks[key].volume += d.volume;
+                }
+            });
+            return Object.values(weeks).sort((a, b) => a.time.localeCompare(b.time));
+        }
+
+        function aggregateToMonthly(data) {
+            const months = {};
+            data.forEach(d => {
+                const key = d.time.substring(0, 7) + '-01';
+
+                if (!months[key]) {
+                    months[key] = { time: key, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume };
+                } else {
+                    months[key].high = Math.max(months[key].high, d.high);
+                    months[key].low = Math.min(months[key].low, d.low);
+                    months[key].close = d.close;
+                    months[key].volume += d.volume;
+                }
+            });
+            return Object.values(months).sort((a, b) => a.time.localeCompare(b.time));
+        }
+
+        // ===== Fetch Quotes =====
+        async function fetchQuotes() {
+            const symbols = stocks.map(s => `tse_${s.code}.tw`).join('|');
+            const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${symbols}&json=1&delay=0&_=${Date.now()}`;
+
+            try {
+                const json = await fetchWithProxy(url);
+
+                if (json.msgArray && json.msgArray.length > 0) {
+                    json.msgArray.forEach(item => {
+                        const code = item.c;
+                        const price = parseFloat(item.z) || parseFloat(item.pz) || 0;
+                        const yesterday = parseFloat(item.y) || 0;
+                        const change = price - yesterday;
+                        const changePercent = yesterday ? (change / yesterday * 100) : 0;
+
+                        if (price > 0) {
+                            priceData[code] = { price, change, changePercent };
+
+                            const stockItem = stocks.find(s => s.code === code);
+                            if (stockItem && item.n) {
+                                stockItem.name = item.n;
+                            }
+                        }
+                    });
+                    saveStocks();
+                    updateCurrentStockLabel();
+                    renderWatchlist();
+                    updateRefreshStatus('即時');
+                    return;
+                }
+            } catch (error) {
+                console.warn('Quote fetch failed');
+            }
+
+            generateDemoQuotes();
+            renderWatchlist();
+            updateRefreshStatus('模擬');
+        }
+
+        // ===== Render Watchlist =====
+        function renderWatchlist() {
+            const container = document.getElementById('watchlist');
+            container.innerHTML = stocks.map((stock, index) => {
+                const data = priceData[stock.code] || {};
+                const price = data.price ? data.price.toFixed(2) : '--';
+                const change = data.change || 0;
+                const changePct = data.changePercent || 0;
+                const colorClass = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
+                const sign = change > 0 ? '+' : '';
+                const activeClass = stock.code === currentStock ? 'active' : '';
+
+                return `
+                    <div class="stock-item ${activeClass}" 
+                         draggable="true"
+                         ondragstart="handleDragStart(event, ${index})"
+                         ondragend="handleDragEnd(event)"
+                         ondragover="handleDragOver(event, ${index})"
+                         ondrop="handleDrop(event, ${index})"
+                         onclick="selectStock('${stock.code}')">
+                        <span class="drag-handle" title="拖曳排序">☰</span>
+                        <div class="stock-info">
+                            <div class="stock-code">${stock.code}</div>
+                            <div class="stock-name">${stock.name}</div>
+                        </div>
+                        <div class="stock-price-data">
+                            <div class="price-main ${colorClass}">${price}</div>
+                            <div class="price-change ${colorClass}">${sign}${change.toFixed(2)} (${sign}${changePct.toFixed(2)}%)</div>
+                        </div>
+                        <button class="delete-btn" onclick="removeStock('${stock.code}', event)" title="移除">✕</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateRefreshStatus(mode) {
+            const now = new Date();
+            const time = now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('refreshStatus').textContent = `${time} [${mode}]`;
+        }
+
+        // ===== UI Controls =====
+        function selectStock(code) {
+            currentStock = code;
+            updateCurrentStockLabel();
+            loadNotes(code);
+            renderWatchlist();
+            fetchHistoricalData(code, currentInterval);
+        }
+
+        function changeInterval(interval) {
+            currentInterval = interval;
+            document.querySelectorAll('.interval-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.interval === interval);
+            });
+            fetchHistoricalData(currentStock, interval);
+        }
+
+        function showLoading(show) {
+            document.getElementById('chartLoading').style.display = show ? 'block' : 'none';
+        }
+
+        // ===== Initialize =====
+        async function init() {
+            loadStocks();
+            initChart();
+            updateCurrentStockLabel();
+            loadNotes(currentStock);
+            generateDemoQuotes();
+            renderWatchlist();
+
+            await Promise.all([
+                fetchHistoricalData(currentStock, currentInterval),
+                fetchQuotes()
+            ]);
+
+            window.setInterval(() => fetchQuotes(), 60000);
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
