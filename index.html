@@ -182,6 +182,8 @@
             padding: 10px 14px;
             background: var(--bg-tertiary);
             border-bottom: 1px solid var(--border-color);
+            flex-wrap: wrap;
+            gap: 4px;
         }
 
         .watchlist-title {
@@ -198,8 +200,24 @@
             height: 18px;
         }
 
-        .refresh-status {
+        .refresh-info {
+            display: flex;
+            align-items: center;
+            gap: 6px;
             font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .refresh-source {
+            color: var(--color-up);
+            font-weight: 500;
+        }
+
+        .refresh-source.demo {
+            color: var(--text-muted);
+        }
+
+        .refresh-time {
             color: var(--text-muted);
         }
 
@@ -254,11 +272,11 @@
             overflow-y: auto;
         }
 
-        /* Draggable Stock Item */
+        /* Stock Item */
         .stock-item {
             display: flex;
             align-items: center;
-            padding: 10px 12px;
+            padding: 12px 14px;
             border-bottom: 1px solid var(--border-color);
             cursor: pointer;
             transition: background 0.15s;
@@ -299,19 +317,20 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 2px;
+            gap: 4px;
             min-width: 0;
         }
 
         .stock-code {
-            font-size: 14px;
+            font-size: 15px;
             font-weight: 600;
             color: var(--text-primary);
         }
 
+        /* 股票名稱字體放大兩倍 */
         .stock-name {
-            font-size: 11px;
-            color: var(--text-muted);
+            font-size: 14px;
+            color: var(--text-secondary);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -319,17 +338,17 @@
 
         .stock-price-data {
             text-align: right;
-            margin-right: 8px;
+            margin-right: 10px;
         }
 
         .price-main {
-            font-size: 14px;
+            font-size: 16px;
             font-weight: 600;
         }
 
         .price-change {
-            font-size: 11px;
-            margin-top: 1px;
+            font-size: 12px;
+            margin-top: 2px;
         }
 
         .delete-btn {
@@ -436,7 +455,7 @@
             }
         }
 
-        /* Toast Notification */
+        /* Toast */
         .toast {
             position: fixed;
             bottom: 20px;
@@ -490,10 +509,12 @@
                     <img src="favicon.ico" alt="icon">
                     即時報價
                 </span>
-                <span id="refreshStatus" class="refresh-status">載入中...</span>
+                <div class="refresh-info">
+                    <span id="refreshSource" class="refresh-source">載入中</span>
+                    <span id="refreshTime" class="refresh-time"></span>
+                </div>
             </div>
 
-            <!-- Search Box -->
             <div class="search-box">
                 <div class="search-input-group">
                     <input type="text" id="searchInput" class="search-input" placeholder="輸入股票代碼 (如: 2317)"
@@ -514,7 +535,6 @@
     <div id="toast" class="toast"></div>
 
     <script>
-        // ===== Default Stocks =====
         const DEFAULT_STOCKS = [
             { code: '0050', name: '元大台灣50' },
             { code: '0056', name: '元大高股息' },
@@ -530,82 +550,42 @@
 
         const STORAGE_KEY = 'zen_watchlist';
         const NOTES_PREFIX = 'zen_note_';
+        const CORS_PROXIES = ['https://corsproxy.io/?', 'https://api.allorigins.win/raw?url='];
 
-        const CORS_PROXIES = [
-            'https://corsproxy.io/?',
-            'https://api.allorigins.win/raw?url='
-        ];
+        let stocks = [], currentStock = '', currentInterval = 'D';
+        let chart = null, candlestickSeries = null, volumeSeries = null;
+        let priceData = {}, proxyIndex = 0, draggedItem = null, notesAutoSaveTimer = null;
 
-        // ===== State =====
-        let stocks = [];
-        let currentStock = '';
-        let currentInterval = 'D';
-        let chart = null;
-        let candlestickSeries = null;
-        let volumeSeries = null;
-        let priceData = {};
-        let proxyIndex = 0;
-        let draggedItem = null;
-        let notesAutoSaveTimer = null;
-
-        // ===== localStorage Functions =====
+        // localStorage
         function loadStocks() {
             try {
                 const saved = localStorage.getItem(STORAGE_KEY);
-                if (saved) {
-                    stocks = JSON.parse(saved);
-                    if (stocks.length === 0) {
-                        stocks = [...DEFAULT_STOCKS];
-                    }
-                } else {
-                    stocks = [...DEFAULT_STOCKS];
-                }
-            } catch (e) {
-                stocks = [...DEFAULT_STOCKS];
-            }
+                stocks = saved ? JSON.parse(saved) : [...DEFAULT_STOCKS];
+                if (!stocks.length) stocks = [...DEFAULT_STOCKS];
+            } catch (e) { stocks = [...DEFAULT_STOCKS]; }
             currentStock = stocks[0]?.code || '0050';
         }
 
         function saveStocks() {
-            try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(stocks));
-            } catch (e) {
-                console.error('Failed to save stocks');
-            }
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(stocks)); } catch (e) { }
         }
 
-        // Per-stock notes
         function loadNotes(stockCode) {
-            try {
-                const notes = localStorage.getItem(NOTES_PREFIX + stockCode) || '';
-                document.getElementById('notesInput').value = notes;
-            } catch (e) {
-                document.getElementById('notesInput').value = '';
-            }
+            try { document.getElementById('notesInput').value = localStorage.getItem(NOTES_PREFIX + stockCode) || ''; }
+            catch (e) { document.getElementById('notesInput').value = ''; }
         }
 
         function saveNotes() {
             try {
-                const notes = document.getElementById('notesInput').value;
-                localStorage.setItem(NOTES_PREFIX + currentStock, notes);
+                localStorage.setItem(NOTES_PREFIX + currentStock, document.getElementById('notesInput').value);
                 showToast(`${currentStock} 備註已儲存`);
-            } catch (e) {
-                showToast('儲存失敗');
-            }
+            } catch (e) { showToast('儲存失敗'); }
         }
 
         function autoSaveNotes() {
-            // Debounce auto-save
-            if (notesAutoSaveTimer) {
-                clearTimeout(notesAutoSaveTimer);
-            }
+            if (notesAutoSaveTimer) clearTimeout(notesAutoSaveTimer);
             notesAutoSaveTimer = setTimeout(() => {
-                try {
-                    const notes = document.getElementById('notesInput').value;
-                    localStorage.setItem(NOTES_PREFIX + currentStock, notes);
-                } catch (e) {
-                    // Silent fail
-                }
+                try { localStorage.setItem(NOTES_PREFIX + currentStock, document.getElementById('notesInput').value); } catch (e) { }
             }, 1000);
         }
 
@@ -623,32 +603,18 @@
             }
         }
 
-        // ===== Update Current Stock Label =====
         function updateCurrentStockLabel() {
             const stock = stocks.find(s => s.code === currentStock);
-            const label = stock ? `${stock.code} ${stock.name}` : currentStock;
-            document.getElementById('currentStockLabel').textContent = label;
+            document.getElementById('currentStockLabel').textContent = stock ? `${stock.code} ${stock.name}` : currentStock;
         }
 
-        // ===== Add/Remove Stocks =====
         function addStock() {
             const input = document.getElementById('searchInput');
             const code = input.value.trim().toUpperCase();
-
-            if (!code) {
-                showToast('請輸入股票代碼');
-                return;
-            }
-
-            if (stocks.find(s => s.code === code)) {
-                showToast('此股票已在清單中');
-                return;
-            }
-
-            const newStock = { code, name: `股票 ${code}` };
-            stocks.push(newStock);
+            if (!code) { showToast('請輸入股票代碼'); return; }
+            if (stocks.find(s => s.code === code)) { showToast('此股票已在清單中'); return; }
+            stocks.push({ code, name: `股票 ${code}` });
             saveStocks();
-
             input.value = '';
             renderWatchlist();
             fetchQuotes();
@@ -657,37 +623,23 @@
 
         function removeStock(code, event) {
             event.stopPropagation();
-
-            if (stocks.length <= 1) {
-                showToast('至少需要保留一支股票');
-                return;
-            }
-
-            if (!confirm(`確定要移除 ${code} 嗎？`)) {
-                return;
-            }
-
+            if (stocks.length <= 1) { showToast('至少需要保留一支股票'); return; }
+            if (!confirm(`確定要移除 ${code} 嗎？`)) return;
             stocks = stocks.filter(s => s.code !== code);
             saveStocks();
-
             if (currentStock === code) {
                 currentStock = stocks[0].code;
                 updateCurrentStockLabel();
                 loadNotes(currentStock);
                 fetchHistoricalData(currentStock, currentInterval);
             }
-
             renderWatchlist();
             showToast(`已移除 ${code}`);
         }
 
-        function handleSearchKeypress(event) {
-            if (event.key === 'Enter') {
-                addStock();
-            }
-        }
+        function handleSearchKeypress(event) { if (event.key === 'Enter') addStock(); }
 
-        // ===== Drag and Drop =====
+        // Drag and Drop
         function handleDragStart(e, index) {
             draggedItem = index;
             e.target.classList.add('dragging');
@@ -697,36 +649,28 @@
 
         function handleDragEnd(e) {
             e.target.classList.remove('dragging');
-            document.querySelectorAll('.stock-item').forEach(item => {
-                item.classList.remove('drag-over');
-            });
+            document.querySelectorAll('.stock-item').forEach(item => item.classList.remove('drag-over'));
             draggedItem = null;
         }
 
         function handleDragOver(e, index) {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
-
-            const items = document.querySelectorAll('.stock-item');
-            items.forEach((item, i) => {
+            document.querySelectorAll('.stock-item').forEach((item, i) => {
                 item.classList.toggle('drag-over', i === index && i !== draggedItem);
             });
         }
 
         function handleDrop(e, targetIndex) {
             e.preventDefault();
-
             if (draggedItem === null || draggedItem === targetIndex) return;
-
             const [removed] = stocks.splice(draggedItem, 1);
             stocks.splice(targetIndex, 0, removed);
-
             saveStocks();
             renderWatchlist();
             showToast('順序已更新');
         }
 
-        // ===== Toast =====
         function showToast(message) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
@@ -734,244 +678,175 @@
             setTimeout(() => toast.classList.remove('show'), 2000);
         }
 
-        // ===== Chart Setup =====
+        // Chart
         function initChart() {
             const container = document.getElementById('chart');
-
             chart = LightweightCharts.createChart(container, {
-                layout: {
-                    background: { type: 'solid', color: '#0a0a0a' },
-                    textColor: '#888888',
-                },
-                grid: {
-                    vertLines: { color: '#1a1a1a' },
-                    horzLines: { color: '#1a1a1a' },
-                },
-                crosshair: {
-                    mode: LightweightCharts.CrosshairMode.Normal,
-                },
-                rightPriceScale: {
-                    borderColor: '#222222',
-                },
-                timeScale: {
-                    borderColor: '#222222',
-                    timeVisible: true,
-                },
+                layout: { background: { type: 'solid', color: '#0a0a0a' }, textColor: '#888888' },
+                grid: { vertLines: { color: '#1a1a1a' }, horzLines: { color: '#1a1a1a' } },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                rightPriceScale: { borderColor: '#222222' },
+                timeScale: { borderColor: '#222222', timeVisible: true },
                 handleScroll: true,
                 handleScale: true,
             });
 
             candlestickSeries = chart.addCandlestickSeries({
-                upColor: '#26a69a',
-                downColor: '#ef5350',
-                borderDownColor: '#ef5350',
-                borderUpColor: '#26a69a',
-                wickDownColor: '#ef5350',
-                wickUpColor: '#26a69a',
+                upColor: '#26a69a', downColor: '#ef5350',
+                borderDownColor: '#ef5350', borderUpColor: '#26a69a',
+                wickDownColor: '#ef5350', wickUpColor: '#26a69a',
             });
 
             volumeSeries = chart.addHistogramSeries({
-                color: '#26a69a',
-                priceFormat: { type: 'volume' },
-                priceScaleId: '',
-                scaleMargins: { top: 0.8, bottom: 0 },
+                color: '#26a69a', priceFormat: { type: 'volume' },
+                priceScaleId: '', scaleMargins: { top: 0.8, bottom: 0 },
             });
 
-            const resizeObserver = new ResizeObserver(entries => {
-                if (entries.length === 0 || entries[0].target !== container) return;
-                const { width, height } = entries[0].contentRect;
-                chart.applyOptions({ width, height });
-            });
-            resizeObserver.observe(container);
+            new ResizeObserver(entries => {
+                if (entries[0]?.target === container) {
+                    const { width, height } = entries[0].contentRect;
+                    chart.applyOptions({ width, height });
+                }
+            }).observe(container);
         }
 
-        // ===== Generate Demo Data =====
+        // 只抓取近 30 天資料 (1 個月)
         function generateDemoData(stockCode) {
             const data = [];
             const basePrice = getBasePrice(stockCode);
-
-            let price = basePrice * 0.92;
+            let price = basePrice * 0.97;
             const now = new Date();
 
-            for (let i = 180; i >= 0; i--) {
+            // 改為 30 天
+            for (let i = 30; i >= 0; i--) {
                 const date = new Date(now);
                 date.setDate(date.getDate() - i);
-
                 if (date.getDay() === 0 || date.getDay() === 6) continue;
 
-                const change = (Math.random() - 0.47) * basePrice * 0.025;
+                const change = (Math.random() - 0.48) * basePrice * 0.02;
                 const open = price;
-                price = Math.max(basePrice * 0.75, Math.min(basePrice * 1.15, price + change));
+                price = Math.max(basePrice * 0.9, Math.min(basePrice * 1.1, price + change));
                 const close = price;
-                const high = Math.max(open, close) * (1 + Math.random() * 0.012);
-                const low = Math.min(open, close) * (1 - Math.random() * 0.012);
+                const high = Math.max(open, close) * (1 + Math.random() * 0.01);
+                const low = Math.min(open, close) * (1 - Math.random() * 0.01);
                 const volume = Math.floor(Math.random() * 30000 + 5000) * 1000;
 
                 data.push({
                     time: date.toISOString().split('T')[0],
-                    open: parseFloat(open.toFixed(2)),
-                    high: parseFloat(high.toFixed(2)),
-                    low: parseFloat(low.toFixed(2)),
-                    close: parseFloat(close.toFixed(2)),
-                    volume
+                    open: +open.toFixed(2), high: +high.toFixed(2),
+                    low: +low.toFixed(2), close: +close.toFixed(2), volume
                 });
             }
-
             return data;
         }
 
         function getBasePrice(code) {
-            const known = {
-                '0050': 152, '0056': 36, '00878': 22, '00918': 21,
-                '00919': 25, '00929': 22, '1514': 185, '2330': 1025,
-                '2884': 29, '2885': 26, '2317': 165, '2454': 1150,
-                '3008': 95, '2412': 125
-            };
-            return known[code] || 100;
+            return {
+                '0050': 152, '0056': 36, '00878': 22, '00918': 21, '00919': 25, '00929': 22,
+                '1514': 185, '2330': 1025, '2884': 29, '2885': 26, '2317': 165, '2454': 1150
+            }[code] || 100;
         }
 
-        // ===== Generate Demo Quotes =====
         function generateDemoQuotes() {
             stocks.forEach(stock => {
                 const basePrice = getBasePrice(stock.code);
                 const changePercent = (Math.random() - 0.5) * 3;
                 const price = basePrice * (1 + changePercent / 100);
-                const change = price - basePrice;
-
                 priceData[stock.code] = {
-                    price: parseFloat(price.toFixed(2)),
-                    change: parseFloat(change.toFixed(2)),
-                    changePercent: parseFloat(changePercent.toFixed(2))
+                    price: +price.toFixed(2),
+                    change: +(price - basePrice).toFixed(2),
+                    changePercent: +changePercent.toFixed(2)
                 };
             });
         }
 
-        // ===== Fetch with Proxy =====
         async function fetchWithProxy(url) {
             for (let i = 0; i < CORS_PROXIES.length; i++) {
                 const idx = (proxyIndex + i) % CORS_PROXIES.length;
-                const proxyUrl = CORS_PROXIES[idx] + encodeURIComponent(url);
                 try {
                     const controller = new AbortController();
                     const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-                    const response = await fetch(proxyUrl, {
-                        signal: controller.signal,
-                        headers: { 'Accept': 'application/json' }
+                    const response = await fetch(CORS_PROXIES[idx] + encodeURIComponent(url), {
+                        signal: controller.signal, headers: { 'Accept': 'application/json' }
                     });
                     clearTimeout(timeoutId);
-
-                    if (response.ok) {
-                        proxyIndex = idx;
-                        return await response.json();
-                    }
-                } catch (e) {
-                    console.warn(`Proxy ${idx} failed`);
-                }
+                    if (response.ok) { proxyIndex = idx; return await response.json(); }
+                } catch (e) { }
             }
-            throw new Error('All proxies failed');
+            throw new Error('Failed');
         }
 
-        // ===== Fetch Historical Data =====
+        // 只抓取當月資料 (約 30 天)
         async function fetchHistoricalData(stockCode, interval = 'D') {
             showLoading(true);
-
             let allData = [];
 
             try {
-                const dates = getDateRange(3);
-
+                // 只抓取 1 個月的資料
+                const dates = getDateRange(1);
                 for (const date of dates) {
-                    const url = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${date}&stockNo=${stockCode}`;
-
                     try {
-                        const json = await fetchWithProxy(url);
-                        if (json.data && json.data.length > 0) {
-                            const parsed = parseStockDayData(json.data);
-                            allData = allData.concat(parsed);
-                        }
-                    } catch (e) {
-                        // Continue
-                    }
+                        const json = await fetchWithProxy(`https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${date}&stockNo=${stockCode}`);
+                        if (json.data?.length) allData = allData.concat(parseStockDayData(json.data));
+                    } catch (e) { }
                 }
-            } catch (error) {
-                console.error('Fetch failed');
-            }
+            } catch (e) { }
 
-            if (allData.length === 0) {
-                allData = generateDemoData(stockCode);
-            }
-
+            if (!allData.length) allData = generateDemoData(stockCode);
             allData.sort((a, b) => a.time.localeCompare(b.time));
 
-            if (interval === 'W') {
-                allData = aggregateToWeekly(allData);
-            } else if (interval === 'M') {
-                allData = aggregateToMonthly(allData);
-            }
+            // 只保留最近 30 天
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const cutoffDate = thirtyDaysAgo.toISOString().split('T')[0];
+            allData = allData.filter(d => d.time >= cutoffDate);
 
-            if (allData.length > 0) {
+            if (interval === 'W') allData = aggregateToWeekly(allData);
+            else if (interval === 'M') allData = aggregateToMonthly(allData);
+
+            if (allData.length) {
                 candlestickSeries.setData(allData);
-
-                const volumeData = allData.map(d => ({
-                    time: d.time,
-                    value: d.volume || 0,
+                volumeSeries.setData(allData.map(d => ({
+                    time: d.time, value: d.volume || 0,
                     color: d.close >= d.open ? '#26a69a80' : '#ef535080'
-                }));
-                volumeSeries.setData(volumeData);
-
+                })));
                 chart.timeScale().fitContent();
             }
-
             showLoading(false);
         }
 
         function parseStockDayData(data) {
             return data.map(row => {
-                const dateStr = row[0];
-                const [year, month, day] = dateStr.split('/');
-                const fullYear = parseInt(year) + 1911;
-
+                const [year, month, day] = row[0].split('/');
                 const open = parseFloat(row[3].replace(/,/g, '')) || 0;
-                const high = parseFloat(row[4].replace(/,/g, '')) || 0;
-                const low = parseFloat(row[5].replace(/,/g, '')) || 0;
                 const close = parseFloat(row[6].replace(/,/g, '')) || 0;
-                const volume = parseInt(row[1].replace(/,/g, '')) || 0;
-
-                if (open === 0 || close === 0) return null;
-
+                if (!open || !close) return null;
                 return {
-                    time: `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
-                    open, high, low, close, volume
+                    time: `${+year + 1911}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
+                    open, high: parseFloat(row[4].replace(/,/g, '')) || 0,
+                    low: parseFloat(row[5].replace(/,/g, '')) || 0, close,
+                    volume: parseInt(row[1].replace(/,/g, '')) || 0
                 };
-            }).filter(d => d !== null);
+            }).filter(d => d);
         }
 
         function getDateRange(months) {
-            const dates = [];
-            const now = new Date();
-
+            const dates = [], now = new Date();
             for (let i = 0; i < months; i++) {
                 const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                const year = d.getFullYear() - 1911;
-                const month = String(d.getMonth() + 1).padStart(2, '0');
-                dates.push(`${year}${month}01`);
+                dates.push(`${d.getFullYear() - 1911}${String(d.getMonth() + 1).padStart(2, '0')}01`);
             }
-
             return dates.reverse();
         }
 
         function aggregateToWeekly(data) {
             const weeks = {};
             data.forEach(d => {
-                const date = new Date(d.time);
-                const weekStart = new Date(date);
+                const date = new Date(d.time), weekStart = new Date(date);
                 weekStart.setDate(date.getDate() - date.getDay());
                 const key = weekStart.toISOString().split('T')[0];
-
-                if (!weeks[key]) {
-                    weeks[key] = { time: key, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume };
-                } else {
+                if (!weeks[key]) weeks[key] = { ...d, time: key };
+                else {
                     weeks[key].high = Math.max(weeks[key].high, d.high);
                     weeks[key].low = Math.min(weeks[key].low, d.low);
                     weeks[key].close = d.close;
@@ -985,10 +860,8 @@
             const months = {};
             data.forEach(d => {
                 const key = d.time.substring(0, 7) + '-01';
-
-                if (!months[key]) {
-                    months[key] = { time: key, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume };
-                } else {
+                if (!months[key]) months[key] = { ...d, time: key };
+                else {
                     months[key].high = Math.max(months[key].high, d.high);
                     months[key].low = Math.min(months[key].low, d.low);
                     months[key].close = d.close;
@@ -998,88 +871,60 @@
             return Object.values(months).sort((a, b) => a.time.localeCompare(b.time));
         }
 
-        // ===== Fetch Quotes =====
         async function fetchQuotes() {
-            const symbols = stocks.map(s => `tse_${s.code}.tw`).join('|');
-            const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${symbols}&json=1&delay=0&_=${Date.now()}`;
-
+            const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${stocks.map(s => `tse_${s.code}.tw`).join('|')}&json=1&delay=0&_=${Date.now()}`;
             try {
                 const json = await fetchWithProxy(url);
-
-                if (json.msgArray && json.msgArray.length > 0) {
+                if (json.msgArray?.length) {
                     json.msgArray.forEach(item => {
-                        const code = item.c;
                         const price = parseFloat(item.z) || parseFloat(item.pz) || 0;
                         const yesterday = parseFloat(item.y) || 0;
-                        const change = price - yesterday;
-                        const changePercent = yesterday ? (change / yesterday * 100) : 0;
-
                         if (price > 0) {
-                            priceData[code] = { price, change, changePercent };
-
-                            const stockItem = stocks.find(s => s.code === code);
-                            if (stockItem && item.n) {
-                                stockItem.name = item.n;
-                            }
+                            priceData[item.c] = { price, change: price - yesterday, changePercent: yesterday ? (price - yesterday) / yesterday * 100 : 0 };
+                            const s = stocks.find(s => s.code === item.c);
+                            if (s && item.n) s.name = item.n;
                         }
                     });
-                    saveStocks();
-                    updateCurrentStockLabel();
-                    renderWatchlist();
-                    updateRefreshStatus('即時');
+                    saveStocks(); updateCurrentStockLabel(); renderWatchlist(); updateRefreshStatus('即時');
                     return;
                 }
-            } catch (error) {
-                console.warn('Quote fetch failed');
-            }
-
-            generateDemoQuotes();
-            renderWatchlist();
-            updateRefreshStatus('模擬');
+            } catch (e) { }
+            generateDemoQuotes(); renderWatchlist(); updateRefreshStatus('模擬');
         }
 
-        // ===== Render Watchlist =====
         function renderWatchlist() {
-            const container = document.getElementById('watchlist');
-            container.innerHTML = stocks.map((stock, index) => {
-                const data = priceData[stock.code] || {};
-                const price = data.price ? data.price.toFixed(2) : '--';
-                const change = data.change || 0;
-                const changePct = data.changePercent || 0;
-                const colorClass = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
+            document.getElementById('watchlist').innerHTML = stocks.map((stock, i) => {
+                const d = priceData[stock.code] || {};
+                const price = d.price ? d.price.toFixed(2) : '--';
+                const change = d.change || 0, pct = d.changePercent || 0;
+                const cls = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
                 const sign = change > 0 ? '+' : '';
-                const activeClass = stock.code === currentStock ? 'active' : '';
 
-                return `
-                    <div class="stock-item ${activeClass}" 
-                         draggable="true"
-                         ondragstart="handleDragStart(event, ${index})"
-                         ondragend="handleDragEnd(event)"
-                         ondragover="handleDragOver(event, ${index})"
-                         ondrop="handleDrop(event, ${index})"
-                         onclick="selectStock('${stock.code}')">
-                        <span class="drag-handle" title="拖曳排序">☰</span>
-                        <div class="stock-info">
-                            <div class="stock-code">${stock.code}</div>
-                            <div class="stock-name">${stock.name}</div>
-                        </div>
-                        <div class="stock-price-data">
-                            <div class="price-main ${colorClass}">${price}</div>
-                            <div class="price-change ${colorClass}">${sign}${change.toFixed(2)} (${sign}${changePct.toFixed(2)}%)</div>
-                        </div>
-                        <button class="delete-btn" onclick="removeStock('${stock.code}', event)" title="移除">✕</button>
+                return `<div class="stock-item ${stock.code === currentStock ? 'active' : ''}" 
+                    draggable="true" ondragstart="handleDragStart(event,${i})" ondragend="handleDragEnd(event)"
+                    ondragover="handleDragOver(event,${i})" ondrop="handleDrop(event,${i})" onclick="selectStock('${stock.code}')">
+                    <span class="drag-handle">☰</span>
+                    <div class="stock-info">
+                        <div class="stock-code">${stock.code}</div>
+                        <div class="stock-name">${stock.name}</div>
                     </div>
-                `;
+                    <div class="stock-price-data">
+                        <div class="price-main ${cls}">${price}</div>
+                        <div class="price-change ${cls}">${sign}${change.toFixed(2)} (${sign}${pct.toFixed(2)}%)</div>
+                    </div>
+                    <button class="delete-btn" onclick="removeStock('${stock.code}',event)">✕</button>
+                </div>`;
             }).join('');
         }
 
         function updateRefreshStatus(mode) {
-            const now = new Date();
-            const time = now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
-            document.getElementById('refreshStatus').textContent = `${time} [${mode}]`;
+            const time = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const src = document.getElementById('refreshSource'), tm = document.getElementById('refreshTime');
+            src.textContent = mode === '即時' ? 'TWSE API' : '模擬資料';
+            src.className = 'refresh-source' + (mode === '即時' ? '' : ' demo');
+            tm.textContent = time;
         }
 
-        // ===== UI Controls =====
         function selectStock(code) {
             currentStock = code;
             updateCurrentStockLabel();
@@ -1090,9 +935,7 @@
 
         function changeInterval(interval) {
             currentInterval = interval;
-            document.querySelectorAll('.interval-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.interval === interval);
-            });
+            document.querySelectorAll('.interval-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.interval === interval));
             fetchHistoricalData(currentStock, interval);
         }
 
@@ -1100,21 +943,11 @@
             document.getElementById('chartLoading').style.display = show ? 'block' : 'none';
         }
 
-        // ===== Initialize =====
         async function init() {
-            loadStocks();
-            initChart();
-            updateCurrentStockLabel();
-            loadNotes(currentStock);
-            generateDemoQuotes();
-            renderWatchlist();
-
-            await Promise.all([
-                fetchHistoricalData(currentStock, currentInterval),
-                fetchQuotes()
-            ]);
-
-            window.setInterval(() => fetchQuotes(), 60000);
+            loadStocks(); initChart(); updateCurrentStockLabel(); loadNotes(currentStock);
+            generateDemoQuotes(); renderWatchlist();
+            await Promise.all([fetchHistoricalData(currentStock, currentInterval), fetchQuotes()]);
+            setInterval(() => fetchQuotes(), 60000);
         }
 
         init();
