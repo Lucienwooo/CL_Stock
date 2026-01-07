@@ -7,6 +7,10 @@
     <title>Zen Market Watch - 台股</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
     <style>
         :root {
             --bg-primary: #0a0a0a;
@@ -183,7 +187,7 @@
             background: var(--bg-tertiary);
             border-bottom: 1px solid var(--border-color);
             flex-wrap: wrap;
-            gap: 4px;
+            gap: 6px;
         }
 
         .watchlist-title {
@@ -198,6 +202,113 @@
         .watchlist-title img {
             width: 18px;
             height: 18px;
+        }
+
+        /* Login Button */
+        .login-section {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .login-btn {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 5px 10px;
+            color: var(--text-secondary);
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .login-btn:hover {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: white;
+        }
+
+        .login-btn .google-icon {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* User Avatar when logged in */
+        .user-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid var(--color-up);
+        }
+
+        .logout-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 4px 8px;
+            color: var(--text-muted);
+            font-size: 10px;
+            cursor: pointer;
+        }
+
+        .logout-btn:hover {
+            border-color: var(--color-down);
+            color: var(--color-down);
+        }
+
+        /* Tooltip for login disclaimer */
+        .login-tooltip {
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            width: 220px;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s;
+            margin-top: 8px;
+            line-height: 1.5;
+            text-align: left;
+        }
+
+        .login-tooltip::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 6px solid var(--border-color);
+        }
+
+        .login-section:hover .login-tooltip {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .sync-status {
+            font-size: 10px;
+            color: var(--color-up);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .sync-status.local {
+            color: var(--text-muted);
         }
 
         .refresh-info {
@@ -327,7 +438,6 @@
             color: var(--text-primary);
         }
 
-        /* 股票名稱字體放大兩倍 */
         .stock-name {
             font-size: 14px;
             color: var(--text-secondary);
@@ -509,6 +619,37 @@
                     <img src="favicon.ico" alt="icon">
                     即時報價
                 </span>
+
+                <!-- Login Section -->
+                <div class="login-section" id="loginSection">
+                    <button class="login-btn" id="loginBtn" onclick="handleGoogleLogin()">
+                        <svg class="google-icon" viewBox="0 0 24 24">
+                            <path fill="#4285F4"
+                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                            <path fill="#34A853"
+                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                            <path fill="#FBBC05"
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                            <path fill="#EA4335"
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                        </svg>
+                        登入
+                    </button>
+                    <div class="login-tooltip">
+                        🔒 <b>隱私聲明</b><br>
+                        僅使用 Google 帳號驗證身份，<br>
+                        <b>不會存取</b>您的任何 Google 資料。<br>
+                        股票清單儲存於獨立資料庫。
+                    </div>
+                </div>
+
+                <!-- User Info (shown when logged in) -->
+                <div class="login-section" id="userSection" style="display: none;">
+                    <span class="sync-status" id="syncStatus">☁️ 雲端同步</span>
+                    <img class="user-avatar" id="userAvatar" src="" alt="avatar">
+                    <button class="logout-btn" onclick="handleLogout()">登出</button>
+                </div>
+
                 <div class="refresh-info">
                     <span id="refreshSource" class="refresh-source">載入中</span>
                     <span id="refreshTime" class="refresh-time"></span>
@@ -526,7 +667,7 @@
             <div id="watchlist" class="watchlist-content"></div>
 
             <div class="storage-info">
-                <span>💾 拖曳排序 · 備註獨立儲存</span>
+                <span id="storageStatus">💾 本地儲存</span>
                 <button class="reset-btn" onclick="resetToDefault()">重設預設</button>
             </div>
         </div>
@@ -535,6 +676,44 @@
     <div id="toast" class="toast"></div>
 
     <script>
+        // ===== Firebase Configuration =====
+        // TODO: 請將此處替換為你的 Firebase 專案設定
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase (only if config is set)
+        let db = null;
+        let auth = null;
+        let currentUser = null;
+        let isFirebaseConfigured = false;
+
+        try {
+            if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+                firebase.initializeApp(firebaseConfig);
+                auth = firebase.auth();
+                db = firebase.firestore();
+                isFirebaseConfigured = true;
+
+                // Listen for auth state changes
+                auth.onAuthStateChanged(user => {
+                    currentUser = user;
+                    updateAuthUI();
+                    if (user) {
+                        loadFromFirestore();
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn('Firebase not configured:', e);
+        }
+
+        // ===== Default Stocks =====
         const DEFAULT_STOCKS = [
             { code: '0050', name: '元大台灣50' },
             { code: '0056', name: '元大高股息' },
@@ -556,7 +735,137 @@
         let chart = null, candlestickSeries = null, volumeSeries = null;
         let priceData = {}, proxyIndex = 0, draggedItem = null, notesAutoSaveTimer = null;
 
-        // localStorage
+        // ===== Auth Functions =====
+        async function handleGoogleLogin() {
+            if (!isFirebaseConfigured) {
+                showToast('Firebase 尚未設定，請先完成設定');
+                return;
+            }
+
+            try {
+                const provider = new firebase.auth.GoogleAuthProvider();
+                provider.setCustomParameters({ prompt: 'select_account' });
+                await auth.signInWithPopup(provider);
+                showToast('登入成功！資料將雲端同步');
+            } catch (error) {
+                if (error.code === 'auth/popup-closed-by-user') {
+                    return; // User closed popup
+                }
+                console.error('Login error:', error);
+                showToast('登入失敗：' + error.message);
+            }
+        }
+
+        async function handleLogout() {
+            if (!auth) return;
+            try {
+                await auth.signOut();
+                currentUser = null;
+                updateAuthUI();
+                showToast('已登出，切換為本地儲存');
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        }
+
+        function updateAuthUI() {
+            const loginSection = document.getElementById('loginSection');
+            const userSection = document.getElementById('userSection');
+            const storageStatus = document.getElementById('storageStatus');
+
+            if (currentUser) {
+                loginSection.style.display = 'none';
+                userSection.style.display = 'flex';
+                document.getElementById('userAvatar').src = currentUser.photoURL || 'favicon.ico';
+                storageStatus.textContent = '☁️ 雲端同步';
+                storageStatus.style.color = '#26a69a';
+            } else {
+                loginSection.style.display = 'flex';
+                userSection.style.display = 'none';
+                storageStatus.textContent = '💾 本地儲存';
+                storageStatus.style.color = '';
+            }
+        }
+
+        // ===== Firestore Functions =====
+        async function loadFromFirestore() {
+            if (!db || !currentUser) return;
+
+            try {
+                const doc = await db.collection('users').doc(currentUser.uid).get();
+                if (doc.exists) {
+                    const data = doc.data();
+                    if (data.stocks && data.stocks.length > 0) {
+                        stocks = data.stocks;
+                        renderWatchlist();
+                        updateCurrentStockLabel();
+                        showToast('已載入雲端資料');
+                    }
+                    // Load notes
+                    if (data.notes) {
+                        Object.keys(data.notes).forEach(code => {
+                            localStorage.setItem(NOTES_PREFIX + code, data.notes[code]);
+                        });
+                        loadNotes(currentStock);
+                    }
+                } else {
+                    // First time user, save current local data to cloud
+                    await saveToFirestore();
+                }
+                updateSyncStatus('synced');
+            } catch (error) {
+                console.error('Firestore load error:', error);
+                updateSyncStatus('error');
+            }
+        }
+
+        async function saveToFirestore() {
+            if (!db || !currentUser) return;
+
+            try {
+                updateSyncStatus('syncing');
+
+                // Collect all notes
+                const notes = {};
+                stocks.forEach(s => {
+                    const note = localStorage.getItem(NOTES_PREFIX + s.code);
+                    if (note) notes[s.code] = note;
+                });
+
+                await db.collection('users').doc(currentUser.uid).set({
+                    stocks: stocks,
+                    notes: notes,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+
+                updateSyncStatus('synced');
+            } catch (error) {
+                console.error('Firestore save error:', error);
+                updateSyncStatus('error');
+            }
+        }
+
+        function updateSyncStatus(status) {
+            const syncEl = document.getElementById('syncStatus');
+            if (!syncEl) return;
+
+            switch (status) {
+                case 'syncing':
+                    syncEl.textContent = '🔄 同步中...';
+                    syncEl.style.color = '#ffc107';
+                    break;
+                case 'synced':
+                    syncEl.textContent = '☁️ 已同步';
+                    syncEl.style.color = '#26a69a';
+                    break;
+                case 'error':
+                    syncEl.textContent = '⚠️ 同步失敗';
+                    syncEl.style.color = '#ef5350';
+                    break;
+            }
+        }
+
+        // ===== localStorage Functions =====
         function loadStocks() {
             try {
                 const saved = localStorage.getItem(STORAGE_KEY);
@@ -567,7 +876,11 @@
         }
 
         function saveStocks() {
-            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(stocks)); } catch (e) { }
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(stocks));
+                // Also save to Firestore if logged in
+                if (currentUser) saveToFirestore();
+            } catch (e) { }
         }
 
         function loadNotes(stockCode) {
@@ -578,6 +891,7 @@
         function saveNotes() {
             try {
                 localStorage.setItem(NOTES_PREFIX + currentStock, document.getElementById('notesInput').value);
+                if (currentUser) saveToFirestore();
                 showToast(`${currentStock} 備註已儲存`);
             } catch (e) { showToast('儲存失敗'); }
         }
@@ -585,7 +899,10 @@
         function autoSaveNotes() {
             if (notesAutoSaveTimer) clearTimeout(notesAutoSaveTimer);
             notesAutoSaveTimer = setTimeout(() => {
-                try { localStorage.setItem(NOTES_PREFIX + currentStock, document.getElementById('notesInput').value); } catch (e) { }
+                try {
+                    localStorage.setItem(NOTES_PREFIX + currentStock, document.getElementById('notesInput').value);
+                    if (currentUser) saveToFirestore();
+                } catch (e) { }
             }, 1000);
         }
 
@@ -710,14 +1027,12 @@
             }).observe(container);
         }
 
-        // 只抓取近 30 天資料 (1 個月)
         function generateDemoData(stockCode) {
             const data = [];
             const basePrice = getBasePrice(stockCode);
             let price = basePrice * 0.97;
             const now = new Date();
 
-            // 改為 30 天
             for (let i = 30; i >= 0; i--) {
                 const date = new Date(now);
                 date.setDate(date.getDate() - i);
@@ -776,13 +1091,11 @@
             throw new Error('Failed');
         }
 
-        // 只抓取當月資料 (約 30 天)
         async function fetchHistoricalData(stockCode, interval = 'D') {
             showLoading(true);
             let allData = [];
 
             try {
-                // 只抓取 1 個月的資料
                 const dates = getDateRange(1);
                 for (const date of dates) {
                     try {
@@ -795,7 +1108,6 @@
             if (!allData.length) allData = generateDemoData(stockCode);
             allData.sort((a, b) => a.time.localeCompare(b.time));
 
-            // 只保留最近 30 天
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
             const cutoffDate = thirtyDaysAgo.toISOString().split('T')[0];
@@ -944,7 +1256,7 @@
         }
 
         async function init() {
-            loadStocks(); initChart(); updateCurrentStockLabel(); loadNotes(currentStock);
+            loadStocks(); initChart(); updateCurrentStockLabel(); loadNotes(currentStock); updateAuthUI();
             generateDemoQuotes(); renderWatchlist();
             await Promise.all([fetchHistoricalData(currentStock, currentInterval), fetchQuotes()]);
             setInterval(() => fetchQuotes(), 60000);
