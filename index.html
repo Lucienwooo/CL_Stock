@@ -4,8 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Zen Stock">
     <title>Zen Market Watch - 台股</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="favicon.ico">
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
@@ -332,11 +337,94 @@
             color: var(--text-muted);
         }
 
+        /* Tab Navigation */
+        .tab-nav {
+            display: flex;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            padding: 10px 8px;
+            color: var(--text-muted);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-secondary);
+            background: var(--bg-tertiary);
+        }
+
+        .tab-btn.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue);
+        }
+
         /* Search Box */
         .search-box {
             padding: 10px 14px;
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        /* Search Suggestions */
+        .search-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 14px;
+            right: 14px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 200;
+            display: none;
+        }
+
+        .search-suggestions.show {
+            display: block;
+        }
+
+        .suggestion-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .suggestion-item:hover,
+        .suggestion-item.selected {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .suggestion-code {
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .suggestion-name {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .suggestion-item:hover .suggestion-name,
+        .suggestion-item.selected .suggestion-name {
+            color: rgba(255, 255, 255, 0.8);
         }
 
         .search-input-group {
@@ -561,7 +649,16 @@
 
         @media (max-width: 480px) {
             .interval-buttons {
-                display: none;
+                display: flex;
+                position: fixed;
+                bottom: 60px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: var(--bg-tertiary);
+                padding: 6px;
+                border-radius: 8px;
+                border: 1px solid var(--border-color);
+                z-index: 100;
             }
         }
 
@@ -656,12 +753,21 @@
                 </div>
             </div>
 
+            <!-- Tab Navigation -->
+            <div class="tab-nav">
+                <button class="tab-btn active" data-tab="1" onclick="switchTab(1)">清單 1</button>
+                <button class="tab-btn" data-tab="2" onclick="switchTab(2)">清單 2</button>
+                <button class="tab-btn" data-tab="3" onclick="switchTab(3)">清單 3</button>
+            </div>
+
             <div class="search-box">
                 <div class="search-input-group">
-                    <input type="text" id="searchInput" class="search-input" placeholder="輸入股票代碼 (如: 2317)"
-                        onkeypress="handleSearchKeypress(event)">
+                    <input type="text" id="searchInput" class="search-input" placeholder="輸入代碼或公司名稱"
+                        oninput="handleSearchInput(event)" onkeydown="handleSearchKeydown(event)"
+                        onfocus="showSuggestions()" onblur="hideSuggestionsDelayed()">
                     <button class="add-btn" onclick="addStock()">＋ 新增</button>
                 </div>
+                <div id="searchSuggestions" class="search-suggestions"></div>
             </div>
 
             <div id="watchlist" class="watchlist-content"></div>
@@ -715,26 +821,219 @@
         }
 
         // ===== Default Stocks =====
-        const DEFAULT_STOCKS = [
-            { code: '0050', name: '元大台灣50' },
-            { code: '0056', name: '元大高股息' },
-            { code: '00878', name: '國泰永續高股息' },
-            { code: '00918', name: '大華優利高填息30' },
-            { code: '00919', name: '群益台灣精選高息' },
-            { code: '00929', name: '復華台灣科技優息' },
-            { code: '1514', name: '亞力' },
+        // 靜態預設（API 無法取得時的備用）
+        const FALLBACK_STOCKS = [
             { code: '2330', name: '台積電' },
-            { code: '2884', name: '玉山金' },
-            { code: '2885', name: '元大金' }
+            { code: '0050', name: '元大台灣50' },
+            { code: '2409', name: '友達' },
+            { code: '2303', name: '聯電' },
+            { code: '00919', name: '群益台灣精選高息' },
+            { code: '00878', name: '國泰永續高股息' }
         ];
+
+        let DEFAULT_STOCKS = [...FALLBACK_STOCKS];
 
         const STORAGE_KEY = 'zen_watchlist';
         const NOTES_PREFIX = 'zen_note_';
         const CORS_PROXIES = ['https://corsproxy.io/?', 'https://api.allorigins.win/raw?url='];
 
-        let stocks = [], currentStock = '', currentInterval = 'D';
+        // 三個分頁的清單
+        let watchlists = {
+            1: [],  // 清單1：預設股票
+            2: [],  // 清單2：空白
+            3: []   // 清單3：空白
+        };
+        let currentTab = 1;
+        let stocks = [];  // 當前分頁的股票
+        let currentStock = '', currentInterval = 'D';
         let chart = null, candlestickSeries = null, volumeSeries = null;
         let priceData = {}, proxyIndex = 0, draggedItem = null, notesAutoSaveTimer = null;
+
+        // 股票名稱對照表（用於中文搜尋）
+        let stockList = [];
+        let searchSuggestionIndex = -1;
+
+        // 載入股票名稱對照表
+        async function loadStockList() {
+            try {
+                const json = await fetchWithProxy('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
+                if (Array.isArray(json)) {
+                    stockList = json.map(item => ({
+                        code: item.Code,
+                        name: item.Name
+                    })).filter(s => s.code && s.name);
+                    console.log(`載入 ${stockList.length} 支股票資料`);
+                }
+            } catch (e) {
+                console.warn('無法載入股票清單', e);
+            }
+        }
+
+        // 搜尋股票（支援代碼和中文名稱）
+        function searchStocks(query) {
+            if (!query || query.length < 1) return [];
+            const q = query.toLowerCase();
+            return stockList.filter(s =>
+                s.code.toLowerCase().includes(q) ||
+                s.name.toLowerCase().includes(q)
+            ).slice(0, 8);
+        }
+
+        // 顯示搜尋建議
+        function showSuggestions() {
+            const input = document.getElementById('searchInput');
+            const results = searchStocks(input.value.trim());
+            const container = document.getElementById('searchSuggestions');
+
+            if (results.length === 0) {
+                container.classList.remove('show');
+                return;
+            }
+
+            container.innerHTML = results.map((s, i) => `
+                <div class="suggestion-item ${i === searchSuggestionIndex ? 'selected' : ''}" 
+                     onmousedown="selectSuggestion('${s.code}', '${s.name}')">
+                    <span class="suggestion-code">${s.code}</span>
+                    <span class="suggestion-name">${s.name}</span>
+                </div>
+            `).join('');
+            container.classList.add('show');
+        }
+
+        function hideSuggestionsDelayed() {
+            setTimeout(() => {
+                document.getElementById('searchSuggestions').classList.remove('show');
+                searchSuggestionIndex = -1;
+            }, 200);
+        }
+
+        function selectSuggestion(code, name) {
+            document.getElementById('searchInput').value = code;
+            document.getElementById('searchSuggestions').classList.remove('show');
+            addStockWithName(code, name);
+        }
+
+        function handleSearchInput(e) {
+            searchSuggestionIndex = -1;
+            showSuggestions();
+        }
+
+        function handleSearchKeydown(e) {
+            const container = document.getElementById('searchSuggestions');
+            const items = container.querySelectorAll('.suggestion-item');
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                searchSuggestionIndex = Math.min(searchSuggestionIndex + 1, items.length - 1);
+                showSuggestions();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                searchSuggestionIndex = Math.max(searchSuggestionIndex - 1, -1);
+                showSuggestions();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (searchSuggestionIndex >= 0 && items[searchSuggestionIndex]) {
+                    items[searchSuggestionIndex].click();
+                } else {
+                    addStock();
+                }
+                container.classList.remove('show');
+            } else if (e.key === 'Escape') {
+                container.classList.remove('show');
+            }
+        }
+
+        // 分頁切換
+        function switchTab(tab) {
+            // 儲存當前分頁
+            watchlists[currentTab] = [...stocks];
+            saveWatchlists();
+
+            // 切換到新分頁
+            currentTab = tab;
+            stocks = watchlists[tab] || [];
+
+            // 更新 UI
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.tab) === tab);
+            });
+
+            renderWatchlist();
+
+            // 如果新分頁有股票，選擇第一支
+            if (stocks.length > 0) {
+                currentStock = stocks[0].code;
+                updateCurrentStockLabel();
+                loadNotes(currentStock);
+                fetchHistoricalData(currentStock, currentInterval);
+            }
+
+            showToast(`已切換到清單 ${tab}`);
+        }
+
+        // 載入所有分頁
+        function loadWatchlists() {
+            try {
+                for (let i = 1; i <= 3; i++) {
+                    const saved = localStorage.getItem(`${STORAGE_KEY}_${i}`);
+                    watchlists[i] = saved ? JSON.parse(saved) : (i === 1 ? [...FALLBACK_STOCKS] : []);
+                }
+                stocks = watchlists[1];
+                if (!stocks.length) stocks = [...FALLBACK_STOCKS];
+            } catch (e) {
+                watchlists[1] = [...FALLBACK_STOCKS];
+                watchlists[2] = [];
+                watchlists[3] = [];
+                stocks = watchlists[1];
+            }
+            currentStock = stocks[0]?.code || '2330';
+        }
+
+        // 儲存所有分頁
+        function saveWatchlists() {
+            try {
+                watchlists[currentTab] = [...stocks];
+                for (let i = 1; i <= 3; i++) {
+                    localStorage.setItem(`${STORAGE_KEY}_${i}`, JSON.stringify(watchlists[i]));
+                }
+                if (currentUser) saveToFirestore();
+            } catch (e) { }
+        }
+
+        // 動態抓取成交量排行前20名
+        async function fetchTopVolumeStocks() {
+            try {
+                const json = await fetchWithProxy('https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX20?response=json');
+                if (json.stat !== 'OK' || !json.data) return FALLBACK_STOCKS;
+
+                const excludeCodes = ['2330', '0050']; // 已經固定的股票
+                const topStocks = json.data.map(row => ({
+                    code: String(row[1]).trim(),
+                    name: String(row[2]).trim()
+                })).filter(s => !excludeCodes.includes(s.code));
+
+                // 判斷是否為 ETF（代碼以 00 開頭且長度 >= 5）
+                const isETF = code => code.startsWith('00') && code.length >= 5;
+
+                // 分離個股和 ETF
+                const individualStocks = topStocks.filter(s => !isETF(s.code));
+                const etfs = topStocks.filter(s => isETF(s.code));
+
+                // 組合：台積電 + 0050 + 2隻個股 + 2隻ETF
+                const result = [
+                    { code: '2330', name: '台積電' },
+                    { code: '0050', name: '元大台灣50' },
+                    ...individualStocks.slice(0, 2),
+                    ...etfs.slice(0, 2)
+                ];
+
+                console.log('動態預設股票:', result);
+                return result;
+            } catch (e) {
+                console.warn('無法取得成交量排行，使用預設清單');
+                return FALLBACK_STOCKS;
+            }
+        }
 
         // ===== Auth Functions =====
         async function handleGoogleLogin() {
@@ -880,20 +1179,13 @@
 
         // ===== localStorage Functions =====
         function loadStocks() {
-            try {
-                const saved = localStorage.getItem(STORAGE_KEY);
-                stocks = saved ? JSON.parse(saved) : [...DEFAULT_STOCKS];
-                if (!stocks.length) stocks = [...DEFAULT_STOCKS];
-            } catch (e) { stocks = [...DEFAULT_STOCKS]; }
-            currentStock = stocks[0]?.code || '0050';
+            // 使用新的分頁系統載入
+            loadWatchlists();
         }
 
         function saveStocks() {
-            try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(stocks));
-                // Also save to Firestore if logged in
-                if (currentUser) saveToFirestore();
-            } catch (e) { }
+            // 使用新的分頁系統儲存
+            saveWatchlists();
         }
 
         function loadNotes(stockCode) {
@@ -919,8 +1211,10 @@
             }, 1000);
         }
 
-        function resetToDefault() {
+        async function resetToDefault() {
             if (confirm('確定要重設為預設清單嗎？（備註不會被刪除）')) {
+                showToast('正在取得最新成交量排行...');
+                DEFAULT_STOCKS = await fetchTopVolumeStocks();
                 stocks = [...DEFAULT_STOCKS];
                 saveStocks();
                 currentStock = stocks[0].code;
@@ -929,7 +1223,7 @@
                 renderWatchlist();
                 fetchHistoricalData(currentStock, currentInterval);
                 fetchQuotes();
-                showToast('已重設為預設清單');
+                showToast('已重設為成交量排行清單');
             }
         }
 
@@ -943,12 +1237,30 @@
             const code = input.value.trim().toUpperCase();
             if (!code) { showToast('請輸入股票代碼'); return; }
             if (stocks.find(s => s.code === code)) { showToast('此股票已在清單中'); return; }
-            stocks.push({ code, name: `股票 ${code}` });
+
+            // 嘗試從股票清單找到名稱
+            const found = stockList.find(s => s.code === code);
+            const name = found ? found.name : `股票 ${code}`;
+
+            stocks.push({ code, name });
             saveStocks();
             input.value = '';
             renderWatchlist();
             fetchQuotes();
-            showToast(`已新增 ${code}`);
+            showToast(`已新增 ${code} ${name}`);
+        }
+
+        function addStockWithName(code, name) {
+            if (stocks.find(s => s.code === code)) {
+                showToast('此股票已在清單中');
+                return;
+            }
+            stocks.push({ code, name });
+            saveStocks();
+            document.getElementById('searchInput').value = '';
+            renderWatchlist();
+            fetchQuotes();
+            showToast(`已新增 ${code} ${name}`);
         }
 
         function removeStock(code, event) {
@@ -1109,7 +1421,8 @@
             let allData = [];
 
             try {
-                const dates = getDateRange(1);
+                // 抓取 36 個月（3年）的資料
+                const dates = getDateRange(36);
                 for (const date of dates) {
                     try {
                         const json = await fetchWithProxy(`https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${date}&stockNo=${stockCode}`);
@@ -1121,10 +1434,7 @@
             if (!allData.length) allData = generateDemoData(stockCode);
             allData.sort((a, b) => a.time.localeCompare(b.time));
 
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            const cutoffDate = thirtyDaysAgo.toISOString().split('T')[0];
-            allData = allData.filter(d => d.time >= cutoffDate);
+            // 移除 30 天限制，保留所有資料供使用者瀏覽
 
             if (interval === 'W') allData = aggregateToWeekly(allData);
             else if (interval === 'M') allData = aggregateToMonthly(allData);
@@ -1135,7 +1445,14 @@
                     time: d.time, value: d.volume || 0,
                     color: d.close >= d.open ? '#26a69a80' : '#ef535080'
                 })));
-                chart.timeScale().fitContent();
+                // 顯示最近 30 天，但使用者可以往回滑動查看更早的資料
+                const now = new Date();
+                const thirtyDaysAgo = new Date(now);
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                chart.timeScale().setVisibleRange({
+                    from: thirtyDaysAgo.getTime() / 1000,
+                    to: now.getTime() / 1000
+                });
             }
             showLoading(false);
         }
@@ -1269,8 +1586,17 @@
         }
 
         async function init() {
-            loadStocks(); initChart(); updateCurrentStockLabel(); loadNotes(currentStock); updateAuthUI();
-            generateDemoQuotes(); renderWatchlist();
+            loadStocks();
+            initChart();
+            updateCurrentStockLabel();
+            loadNotes(currentStock);
+            updateAuthUI();
+            generateDemoQuotes();
+            renderWatchlist();
+
+            // 載入股票名稱對照表（背景執行，用於中文搜尋）
+            loadStockList();
+
             await Promise.all([fetchHistoricalData(currentStock, currentInterval), fetchQuotes()]);
             setInterval(() => fetchQuotes(), 60000);
         }
