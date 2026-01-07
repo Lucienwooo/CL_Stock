@@ -746,12 +746,24 @@
             try {
                 const provider = new firebase.auth.GoogleAuthProvider();
                 provider.setCustomParameters({ prompt: 'select_account' });
-                await auth.signInWithPopup(provider);
-                showToast('登入成功！資料將雲端同步');
-            } catch (error) {
-                if (error.code === 'auth/popup-closed-by-user') {
-                    return; // User closed popup
+
+                // 嘗試使用 popup，如果失敗則使用 redirect
+                try {
+                    await auth.signInWithPopup(provider);
+                    showToast('登入成功！資料將雲端同步');
+                } catch (popupError) {
+                    console.log('Popup failed, trying redirect...', popupError.code);
+                    // 如果 popup 被阻擋或失敗，使用 redirect 方式
+                    if (popupError.code === 'auth/popup-blocked' ||
+                        popupError.code === 'auth/popup-closed-by-user' ||
+                        popupError.code === 'auth/cancelled-popup-request') {
+                        showToast('正在跳轉到 Google 登入...');
+                        await auth.signInWithRedirect(provider);
+                    } else {
+                        throw popupError;
+                    }
                 }
+            } catch (error) {
                 console.error('Login error:', error);
                 showToast('登入失敗：' + error.message);
             }
