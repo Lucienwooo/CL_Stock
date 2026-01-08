@@ -354,6 +354,8 @@
             font-size: 12px;
             cursor: pointer;
             transition: all 0.15s;
+            position: relative;
+            user-select: none;
         }
 
         .tab-btn:hover {
@@ -364,6 +366,35 @@
         .tab-btn.active {
             color: var(--accent-blue);
             border-bottom-color: var(--accent-blue);
+        }
+
+        .tab-btn::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: -28px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 10px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s;
+            z-index: 100;
+        }
+
+        .tab-btn:hover::after {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .tab-btn.renaming {
+            background: var(--accent-blue);
+            color: white;
         }
 
         /* Search Box */
@@ -754,10 +785,19 @@
             </div>
 
             <!-- Tab Navigation -->
-            <div class="tab-nav">
-                <button class="tab-btn active" data-tab="1" onclick="switchTab(1)">清單 1</button>
-                <button class="tab-btn" data-tab="2" onclick="switchTab(2)">清單 2</button>
-                <button class="tab-btn" data-tab="3" onclick="switchTab(3)">清單 3</button>
+            <div class="tab-nav" id="tabNav">
+                <button class="tab-btn active" data-tab="1" data-tooltip="長按修改名稱" onclick="switchTab(1)"
+                    onmousedown="startTabRename(1, event)" onmouseup="cancelTabRename()"
+                    onmouseleave="cancelTabRename()" ontouchstart="startTabRename(1, event)"
+                    ontouchend="cancelTabRename()">清單 1</button>
+                <button class="tab-btn" data-tab="2" data-tooltip="長按修改名稱" onclick="switchTab(2)"
+                    onmousedown="startTabRename(2, event)" onmouseup="cancelTabRename()"
+                    onmouseleave="cancelTabRename()" ontouchstart="startTabRename(2, event)"
+                    ontouchend="cancelTabRename()">清單 2</button>
+                <button class="tab-btn" data-tab="3" data-tooltip="長按修改名稱" onclick="switchTab(3)"
+                    onmousedown="startTabRename(3, event)" onmouseup="cancelTabRename()"
+                    onmouseleave="cancelTabRename()" ontouchstart="startTabRename(3, event)"
+                    ontouchend="cancelTabRename()">清單 3</button>
             </div>
 
             <div class="search-box">
@@ -945,6 +985,9 @@
 
         // 分頁切換
         function switchTab(tab) {
+            // 如果正在改名，不要切換
+            if (isRenamingTab) return;
+
             // 儲存當前分頁
             watchlists[currentTab] = [...stocks];
             saveWatchlists();
@@ -968,7 +1011,65 @@
                 fetchHistoricalData(currentStock, currentInterval);
             }
 
-            showToast(`已切換到清單 ${tab}`);
+            showToast(`已切換到 ${tabNames[tab]}`);
+        }
+
+        // 選單名稱
+        let tabNames = { 1: '清單 1', 2: '清單 2', 3: '清單 3' };
+        let tabRenameTimer = null;
+        let isRenamingTab = false;
+
+        // 載入選單名稱
+        function loadTabNames() {
+            try {
+                const saved = localStorage.getItem('zen_tab_names');
+                if (saved) tabNames = JSON.parse(saved);
+                updateTabNamesUI();
+            } catch (e) { }
+        }
+
+        // 儲存選單名稱
+        function saveTabNames() {
+            try {
+                localStorage.setItem('zen_tab_names', JSON.stringify(tabNames));
+            } catch (e) { }
+        }
+
+        // 更新選單名稱 UI
+        function updateTabNamesUI() {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                const tab = parseInt(btn.dataset.tab);
+                btn.textContent = tabNames[tab] || `清單 ${tab}`;
+            });
+        }
+
+        // 開始長按計時（改名）
+        function startTabRename(tab, event) {
+            event.preventDefault();
+            tabRenameTimer = setTimeout(() => {
+                isRenamingTab = true;
+                const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+                btn.classList.add('renaming');
+
+                const newName = prompt(`請輸入新的名稱：`, tabNames[tab]);
+                if (newName && newName.trim()) {
+                    tabNames[tab] = newName.trim().substring(0, 8); // 最多8個字
+                    saveTabNames();
+                    updateTabNamesUI();
+                    showToast(`已重新命名為「${tabNames[tab]}」`);
+                }
+
+                btn.classList.remove('renaming');
+                isRenamingTab = false;
+            }, 600); // 長按 600 毫秒觸發
+        }
+
+        // 取消長按計時
+        function cancelTabRename() {
+            if (tabRenameTimer) {
+                clearTimeout(tabRenameTimer);
+                tabRenameTimer = null;
+            }
         }
 
         // 載入所有分頁
@@ -1426,8 +1527,14 @@
                 for (const date of dates) {
                     try {
                         const json = await fetchWithProxy(`https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${date}&stockNo=${stockCode}`);
-                        if (json.data?.length) allData = allData.concat(parseStockDayData(json.data));
-                    } catch (e) { }
+                        if (json.data?.length) {
+                            allData = allData.concat(parseStockDayData(json.data));
+                        }
+                        // 增加微小延遲避免被 TWSE API 阻斷 (Rate Limiting)
+                        await new Promise(r => setTimeout(r, 150));
+                    } catch (e) {
+                        console.warn(`月分 ${date} 抓取失敗`, e);
+                    }
                 }
             } catch (e) { }
 
@@ -1475,8 +1582,11 @@
         function getDateRange(months) {
             const dates = [], now = new Date();
             for (let i = 0; i < months; i++) {
+                // 回傳 YYYYMMDD 格式 (西元)，API 較穩定接受此格式
                 const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                dates.push(`${d.getFullYear() - 1911}${String(d.getMonth() + 1).padStart(2, '0')}01`);
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                dates.push(`${year}${month}01`);
             }
             return dates.reverse();
         }
@@ -1587,6 +1697,7 @@
 
         async function init() {
             loadStocks();
+            loadTabNames(); // 載入選單名稱
             initChart();
             updateCurrentStockLabel();
             loadNotes(currentStock);
